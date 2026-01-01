@@ -1,0 +1,311 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ROS2 Stream + Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0b0f14; --card:#121a24; --muted:#93a4b8; --text:#e6eef8; --accent:#4da3ff;
+      --danger:#ff4d4d; --ok:#4dff88;
+    }
+    body{
+      margin:0; font-family:system-ui,Segoe UI,Roboto,Arial;
+      background:radial-gradient(1200px 700px at 20% 0%, #122033 0%, var(--bg) 60%);
+      color:var(--text);
+    }
+    .wrap{ max-width:1200px; margin:0 auto; padding:18px; display:grid; grid-template-columns: 1.6fr 0.8fr; gap:16px; }
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:18px; padding:14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .title{ font-size:18px; font-weight:700; margin:0 0 10px 0; display:flex; align-items:center; gap:10px; }
+    .pill{ font-size:12px; color:var(--muted); border:1px solid rgba(255,255,255,.12); padding:4px 10px; border-radius:999px; }
+    .pill.ok{ color:#bdf7cf; border-color:rgba(77,255,136,.35); }
+    .pill.bad{ color:#ffd0d0; border-color:rgba(255,77,77,.35); }
+    video{ width:100%; background:#000; border-radius:14px; border:1px solid rgba(255,255,255,.10); }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+    button{
+      appearance:none; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06);
+      color:var(--text); padding:10px 12px; border-radius:12px; cursor:pointer;
+      font-weight:600;
+    }
+    button:hover{ border-color:rgba(255,255,255,.25); background:rgba(255,255,255,.10); }
+    .hint{ color:var(--muted); font-size:12px; line-height:1.4; }
+    .joyBox{ display:flex; flex-direction:column; gap:12px; }
+    .joyCanvasWrap{ position:relative; width:100%; aspect-ratio:1/1; }
+    canvas{ width:100%; height:100%; background:rgba(0,0,0,.25); border-radius:16px; border:1px solid rgba(255,255,255,.10); touch-action:none; }
+    .vals{ display:flex; justify-content:space-between; gap:10px; font-variant-numeric: tabular-nums; }
+    .vals .v{ flex:1; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); padding:10px 12px; border-radius:14px; }
+    .vals .k{ color:var(--muted); font-size:12px; margin-bottom:6px; }
+    .vals .n{ font-size:18px; font-weight:700; }
+    @media (max-width: 900px){ .wrap{ grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title">
+        Stream
+        <span id="modePill" class="pill">connecting…</span>
+      </div>
+
+      <div class="row">
+        <button id="pipOpen">Open PiP</button>
+        <button id="pipClose">Close PiP</button>
+        <span class="hint" id="pipHint"></span>
+      </div>
+
+      <!-- IMPORTANT: controls enabled; PiP allowed -->
+      <video id="v" autoplay playsinline muted controls></video>
+
+      <div class="hint" style="margin-top:10px;">
+        If PiP doesn’t open, click the video once then try again (browser gesture policy).
+      </div>
+    </div>
+
+    <div class="card joyBox">
+      <div class="title">Joystick <span class="pill">DataChannel</span></div>
+
+      <div class="joyCanvasWrap">
+        <canvas id="joy" width="500" height="500"></canvas>
+      </div>
+
+      <div class="vals">
+        <div class="v">
+          <div class="k">linear.x</div>
+          <div class="n" id="lin">0.00</div>
+        </div>
+        <div class="v">
+          <div class="k">angular.z</div>
+          <div class="n" id="ang">0.00</div>
+        </div>
+      </div>
+
+      <div class="hint">Drag the knob to drive. Release returns to 0.</div>
+    </div>
+  </div>
+
+<script>
+  // ---- CONFIG ----
+  const SIGNAL_WS = "ws://100.89.254.70:9002"; // <-- CHANGE to your server.js host
+  const ROBOT_ID  = "ROBOT";
+  const MY_ID     = "user_" + Math.random().toString(36).slice(2, 11);
+
+  // scaling (tune if needed)
+  const MAX_LIN = 0.8;   // m/s
+  const MAX_ANG = 1.6;   // rad/s
+
+  function b64enc(str){ return btoa(unescape(encodeURIComponent(str))); }
+  function b64dec(b64){ return decodeURIComponent(escape(atob(b64))); }
+
+  const videoEl = document.getElementById("v");
+  const linEl = document.getElementById("lin");
+  const angEl = document.getElementById("ang");
+  const modePill = document.getElementById("modePill");
+
+  // ---- PiP buttons ----
+  const pipOpenBtn = document.getElementById("pipOpen");
+  const pipCloseBtn = document.getElementById("pipClose");
+  const pipHint = document.getElementById("pipHint");
+
+  videoEl.disablePictureInPicture = false;
+
+  pipHint.textContent = document.pictureInPictureEnabled ? "" : "PiP not supported in this browser.";
+
+  pipOpenBtn.onclick = async () => {
+    try {
+      videoEl.disablePictureInPicture = false;
+      if (videoEl.paused) await videoEl.play().catch(()=>{});
+      await videoEl.requestPictureInPicture();
+    } catch (e) {
+      console.log("PiP open failed:", e);
+      alert("PiP failed: " + (e?.message || e));
+    }
+  };
+
+  pipCloseBtn.onclick = async () => {
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+    } catch (e) {
+      console.log("PiP close failed:", e);
+    }
+  };
+
+  // ---- WebRTC ----
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+
+  pc.addTransceiver("video", { direction: "recvonly" });
+
+  pc.ontrack = (ev) => {
+    videoEl.srcObject = ev.streams[0];
+    videoEl.play().catch(()=>{});
+  };
+
+  // DataChannel for joystick
+  const dc = pc.createDataChannel("cmd", { ordered: true });
+
+  pc.onicecandidate = (ev) => {
+    if (!ev.candidate) return;
+    ws.send(JSON.stringify({
+      type: "ice",
+      from: MY_ID,
+      to: ROBOT_ID,
+      candidate: ev.candidate.candidate,
+      sdpMid: ev.candidate.sdpMid,
+      sdpMLineIndex: ev.candidate.sdpMLineIndex
+    }));
+  };
+
+  async function makeOffer(){
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({
+      type: "offer",
+      from: MY_ID,
+      to: ROBOT_ID,
+      sdp_base64: b64enc(offer.sdp)
+    }));
+  }
+
+  // ---- Signaling ----
+  const ws = new WebSocket(SIGNAL_WS);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({
+      type: "register",
+      role: "BROWSER",
+      id: MY_ID,
+      mode: "video"
+    }));
+  };
+
+  ws.onmessage = async (ev) => {
+    const text = (ev.data instanceof Blob) ? await ev.data.text() : ev.data;
+    let msg;
+    try { msg = JSON.parse(text); } catch { return; }
+
+    if (msg.type === "registered") {
+      const granted = msg.mode_granted || "video";
+      modePill.textContent = "mode: " + granted;
+      modePill.classList.remove("ok","bad");
+      modePill.classList.add(granted === "video" ? "ok" : "bad");
+      await makeOffer();
+      return;
+    }
+
+    if (msg.type === "answer") {
+      const sdp =
+        msg.sdp ||
+        (msg.sdp_base64 ? b64dec(msg.sdp_base64) : "") ||
+        (typeof msg.data === "string" ? msg.data : "") ||
+        (msg.data?.sdp || "");
+      if (!sdp) return;
+      await pc.setRemoteDescription({ type:"answer", sdp });
+      return;
+    }
+
+    if (msg.type === "ice") {
+      const ice = msg.candidate ? msg : (msg.data || {});
+      if (!ice.candidate) return;
+      try {
+        await pc.addIceCandidate({
+          candidate: ice.candidate,
+          sdpMid: ice.sdpMid ?? null,
+          sdpMLineIndex: ice.sdpMLineIndex ?? 0
+        });
+      } catch {}
+      return;
+    }
+  };
+
+  // ---- Joystick UI ----
+  const canvas = document.getElementById("joy");
+  const ctx = canvas.getContext("2d");
+
+  const state = { active:false, cx:250, cy:250, x:250, y:250, rBase:210, rKnob:55 };
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  function draw(){
+    ctx.clearRect(0,0,500,500);
+    ctx.beginPath();
+    ctx.arc(state.cx, state.cy, state.rBase, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 10;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(state.cx - state.rBase, state.cy);
+    ctx.lineTo(state.cx + state.rBase, state.cy);
+    ctx.moveTo(state.cx, state.cy - state.rBase);
+    ctx.lineTo(state.cx, state.cy + state.rBase);
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(state.x, state.y, state.rKnob, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(77,163,255,0.35)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(77,163,255,0.70)";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+
+  function getXY(e){
+    const rect = canvas.getBoundingClientRect();
+    const t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    const px = (t.clientX - rect.left) * (500 / rect.width);
+    const py = (t.clientY - rect.top)  * (500 / rect.height);
+    return {px, py};
+  }
+
+  function sendJoy(lin, ang){
+    linEl.textContent = lin.toFixed(2);
+    angEl.textContent = ang.toFixed(2);
+
+    // IMPORTANT: match your C++ parser keys: "lin" and "ang"
+    if (dc && dc.readyState === "open") {
+      dc.send(JSON.stringify({ lin: lin, ang: ang }));
+    }
+  }
+
+  function updateKnob(px, py){
+    const dx = px - state.cx;
+    const dy = py - state.cy;
+    const dist = Math.hypot(dx, dy);
+    const maxD = state.rBase - state.rKnob;
+    const s = (dist > maxD) ? (maxD / dist) : 1.0;
+
+    state.x = state.cx + dx*s;
+    state.y = state.cy + dy*s;
+
+    const nx = (state.x - state.cx) / maxD;
+    const ny = (state.cy - state.y) / maxD;
+
+    const lin = clamp(ny, -1, 1) * MAX_LIN;
+    const ang = clamp(nx, -1, 1) * MAX_ANG;
+
+    sendJoy(lin, ang);
+    draw();
+  }
+
+  function resetKnob(){
+    state.x = state.cx;
+    state.y = state.cy;
+    sendJoy(0.0, 0.0);
+    draw();
+  }
+
+  canvas.addEventListener("pointerdown", (e)=>{ state.active=true; canvas.setPointerCapture(e.pointerId); const {px,py}=getXY(e); updateKnob(px,py); });
+  canvas.addEventListener("pointermove", (e)=>{ if(!state.active) return; const {px,py}=getXY(e); updateKnob(px,py); });
+  canvas.addEventListener("pointerup", ()=>{ state.active=false; resetKnob(); });
+  canvas.addEventListener("pointercancel", ()=>{ state.active=false; resetKnob(); });
+
+  draw();
+</script>
+</body>
+</html>

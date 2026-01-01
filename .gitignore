@@ -1,0 +1,33 @@
+# ROS 2 / colcon
+build/
+install/
+log/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime logs
+*.log
+
+# Generated / temp
+*.tmp
+*.bak
+*.old
