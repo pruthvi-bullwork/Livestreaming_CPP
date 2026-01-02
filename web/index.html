@@ -90,7 +90,8 @@
 
 <script>
   // ---- CONFIG ----
-  const SIGNAL_WS = "ws://100.89.254.70:9002"; // <-- CHANGE to your server.js host
+  const WS_PORT = 9002; // your signaling server port
+  const SIGNAL_WS = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${WS_PORT}`;
   const ROBOT_ID  = "ROBOT";
   const MY_ID     = "user_" + Math.random().toString(36).slice(2, 11);
 
