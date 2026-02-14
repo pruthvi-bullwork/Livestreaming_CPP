@@ -13,6 +13,11 @@
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>isaac_ros_managed_nitros</depend>
+  <depend>isaac_ros_nitros_image_type</depend>
+  <depend>isaac_ros_common</depend>
+  <depend>websocketpp</depend>
+
 
   <!-- Optional: keep only if you actually use it elsewhere -->
   <!-- <depend>cv_bridge</depend> -->

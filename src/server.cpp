@@ -15,6 +15,11 @@
 #include <websocketpp/config/asio_no_tls_client.hpp>
 #include <websocketpp/client.hpp>
 
+#include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
+#include "isaac_ros_nitros_image_type/nitros_image_view.hpp"
+#include "isaac_ros_nitros_image_type/nitros_image.hpp"
+#include "cuda_runtime.h"
+
 #include <opencv2/opencv.hpp>
 
 #include <atomic>
@@ -28,6 +33,7 @@
 #include <cstring>
 #include <functional>
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 
 using WsClient = websocketpp::client<websocketpp::config::asio_client>;
@@ -578,6 +584,13 @@ private:
     lin = std::clamp(lin, -self->max_lin_, self->max_lin_);
     ang = std::clamp(ang, -self->max_ang_, self->max_ang_);
 
+
+    // If joystick is centered (0,0), don't treat it as an active command.
+    // This prevents spamming zeros which can override other controllers.
+    constexpr double kZeroEps = 1e-3;
+    if (std::abs(lin) < kZeroEps && std::abs(ang) < kZeroEps) {
+      return;
+    }
     {
       std::lock_guard<std::mutex> lk(self->cmd_mtx_);
       self->last_cmd_.linear.x = lin;
@@ -915,6 +928,15 @@ private:
         out = last_cmd_;
       }
     }
+    // Avoid spamming 0,0 when joystick is centered / deadman triggers.
+    constexpr double kZeroEps = 1e-3;
+    const bool is_zero = (std::abs(out.linear.x) < kZeroEps) && (std::abs(out.angular.z) < kZeroEps);
+    if (is_zero) {
+      if (last_pub_was_zero_) return;
+      last_pub_was_zero_ = true;
+    } else {
+      last_pub_was_zero_ = false;
+    }
 
     cmd_pub_->publish(out);
   }
@@ -953,6 +975,7 @@ private:
   rclcpp::Time last_cmd_time_{0,0,RCL_ROS_TIME};
   std::mutex cmd_mtx_;
 
+  bool last_pub_was_zero_{false}; // suppress repeated zero publishes
   rclcpp::Time last_image_time_{0,0,RCL_ROS_TIME};
 
   GstElement *pipeline_{nullptr}, *appsrc_{nullptr}, *tee_{nullptr};

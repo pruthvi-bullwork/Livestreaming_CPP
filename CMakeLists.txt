@@ -10,6 +10,13 @@ find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(isaac_ros_managed_nitros REQUIRED)
+find_package(isaac_ros_nitros_image_type REQUIRED)
+find_package(isaac_ros_common REQUIRED)
+
+find_package(CUDAToolkit REQUIRED)
+
+find_package(websocketpp REQUIRED)
 
 pkg_check_modules(GST REQUIRED gstreamer-1.0>=1.14)
 pkg_check_modules(GSTAPP REQUIRED gstreamer-app-1.0)
@@ -90,6 +97,20 @@ ament_target_dependencies(server
   sensor_msgs
   geometry_msgs
   std_msgs
+)
+
+target_link_libraries(server
+  CUDA::cudart
+)
+
+ament_target_dependencies(server
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  std_msgs
+  isaac_ros_managed_nitros
+  isaac_ros_nitros_image_type
+  isaac_ros_common
 )
 
 # Ensure npm install runs before building the server (optional but useful)
