@@ -1,44 +1,69 @@
-# livestreaming_cpp
+# Livestreaming_CPP (ROS 2 + WebRTC) — Nitros Enabled
 
-ROS 2 + GStreamer WebRTC livestreaming for ZED camera with **H264 video**, **DataChannel joystick control**, **cmd_vel_out publish**, and **zed_heartbeat** monitoring.
-
-This project runs three parts together using a ROS 2 launch file:
-1) **Signaling server (Node.js WebSocket)** – routes offer/answer/ICE between browser and robot  
-2) **Static web server** – serves `index.html` and `admin.html`  
-3) **ROS 2 C++ streamer node** – subscribes to ZED image topic, encodes H264 via GStreamer, streams via WebRTC, receives joystick values via DataChannel and publishes `/cmd_vel_out`
+This package streams a ROS 2 camera topic to a browser using **GStreamer WebRTC** and supports **NVIDIA Isaac ROS Nitros** (for high-performance image transport).  
+It also includes a web UI (normal + admin page) served by a Node.js HTTP server and a websocket signaling server.
 
 ---
 
-## Features
+## What this uses
 
-- ✅ Live **H264 WebRTC video** from `/zed/zed_node/rgb/image_rect_color`
-- ✅ **Low-latency** pipeline tuned for realtime streaming (frame drops are allowed vs buffering)
-- ✅ DataChannel joystick → publishes `cmd_vel_out`
-- ✅ `zed_heartbeat` topic:
-  - publishes `1` when frames are arriving
-  - publishes `0` when ZED topic stops / stalls
-- ✅ **Admin page** (password-protected) that bypasses normal user video-slot limits
-- ✅ Normal user: video only if a slot is free, otherwise control-only (handled by signaling layer)
+- **ROS 2 Humble**
+- **Isaac ROS Nitros** (Nitros image subscription / acceleration)
+- **GStreamer WebRTC** (`webrtcbin`, H264 encoding, RTP payloading)
+- **Node.js servers**
+  - HTTP UI: `http://<IP>:8080/`
+  - Admin UI: `http://<IP>:8080/admin`
+  - Signaling WebSocket: `ws://<IP>:9002`
 
 ---
 
-## Requirements
+## Folder Layout
 
-### ROS 2
-- ROS 2 Humble
+- Workspace root: `~/Livestreaming_CPP`
+- Build script: `~/Livestreaming_CPP/scripts/build.sh`
 
-### System packages
+---
+
+## Prerequisites
+
+### 1) ROS 2 Humble
+
+Make sure ROS 2 Humble is installed and source it:
+
 ```bash
-sudo apt update
-sudo apt install -y \
-  nodejs npm \
-  gstreamer1.0-tools \
-  gstreamer1.0-plugins-base \
-  gstreamer1.0-plugins-good \
-  gstreamer1.0-plugins-bad \
-  gstreamer1.0-plugins-ugly \
-  gstreamer1.0-libav \
-  libgstreamer1.0-dev \
-  libgstreamer-plugins-base1.0-dev \
-  libgstreamer-plugins-bad1.0-dev \
-  libssl-dev
+source /opt/ros/humble/setup.bash
+```
+
+# Build & Install (using build.sh)
+
+The build script is located here: `/scripts/build.sh`
+
+---
+
+## 1) Make it executable
+
+From the workspace root folder:
+
+```bash
+cd ~/Music/Livestreaming_CPP
+chmod +x scripts/build.sh
+```
+## 2) Run the build script
+
+```bash
+./scripts/build.sh
+```
+
+This script will:
+
+install required apt dependencies (GStreamer plugins, dev libs, etc.)
+
+install Node dependencies for the web server
+
+build the ROS 2 package using colcon
+
+## 3) Launch the Streamer
+
+```bash
+ros2 launch livestreaming_cpp stream.launch.py
+```
