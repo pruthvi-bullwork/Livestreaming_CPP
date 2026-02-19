@@ -52,9 +52,10 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        DeclareLaunchArgument("image_topic", default_value="/zed/zed_node/rgb/color/raw/image"),
+        # UPDATED DEFAULT TOPIC HERE:
+        DeclareLaunchArgument("image_topic", default_value="/zed/zed_node/rgb/color/rect/image"),
         DeclareLaunchArgument("ws_url", default_value="ws://127.0.0.1:9002"),
-        DeclareLaunchArgument("http_port", default_value="8000"),
+        DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("fps", default_value="30"),
         DeclareLaunchArgument("bitrate_kbps", default_value="2000"),
 
