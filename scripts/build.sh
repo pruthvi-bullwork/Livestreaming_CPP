@@ -3,9 +3,13 @@ set -e
 
 WS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "[0/4] Sourcing ROS 2 Humble..."
+echo "[0/4] Cleaning up broken NVIDIA repositories..."
+# Remove 404 repositories identified in your logs
+sudo rm -f /etc/apt/sources.list.d/isaac-ros-embeddedsw.list || true
+sudo rm -f /etc/apt/sources.list.d/isaac-ros.list || true
+
+echo "[1/4] Sourcing ROS 2 Humble..."
 if [ -f /opt/ros/humble/setup.bash ]; then
-  # ROS setup scripts can reference unset vars; keep bash non-strict here
   set +u
   source /opt/ros/humble/setup.bash
   set -u 2>/dev/null || true
@@ -26,7 +30,7 @@ fi
 
 sudo apt install -y \
   python3-colcon-common-extensions \
-  nodejs npm \
+  nodejs \
   gstreamer1.0-tools \
   gstreamer1.0-plugins-base \
   gstreamer1.0-plugins-good \
@@ -43,16 +47,12 @@ cd "$WS_DIR/web"
 # Prefer package-lock if present; install all deps (ws/express/etc.)
 npm install
 
-echo "[3/4] Building ROS2 package..."
+echo "[4/4] Building ROS2 package..."
 cd "$WS_DIR"
 
-# If old build artifacts are owned by root (happens if colcon was run with sudo),
-# fix ownership so we can clean normally.
+# Standard permission fix for Jetson workspaces
 if [ -d build ] || [ -d install ] || [ -d log ]; then
-  if [ ! -w build ] 2>/dev/null || [ ! -w install ] 2>/dev/null || [ ! -w log ] 2>/dev/null; then
-    echo "Build folders not writable (likely root-owned). Fixing ownership..."
-    sudo chown -R "$USER:$USER" build install log || true
-  fi
+  sudo chown -R "$USER:$USER" build install log || true
 fi
 
 rm -rf build install log

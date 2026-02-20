@@ -938,7 +938,22 @@ private:
       last_pub_was_zero_ = false;
     }
 
+    // -------- CHANGE: publish only when needed (no spam at 0,0 / no joystick) --------
+    const bool is_zero = (out.linear.x == 0.0 && out.angular.z == 0.0);
+
+    if (is_zero) {
+      // If we were moving previously, publish a single stop immediately, then stop publishing.
+      if (was_moving_) {
+        cmd_pub_->publish(out);
+        was_moving_ = false;
+      }
+      return; // don't keep sending zeros
+    }
+
+    // Non-zero command: publish (timer rate) while joystick is moving
+    was_moving_ = true;
     cmd_pub_->publish(out);
+    // --------------------------------------------------------------------------------
   }
 
   // -------- heartbeat timer --------
@@ -1007,6 +1022,10 @@ private:
 
   // NEW: connected peers count (for "NETWORK DISCONNECTED" overlay)
   std::atomic<int> connected_peers_{0};
+
+  // -------- CHANGE: track whether we were moving, to send ONE stop and then stop publishing --------
+  bool was_moving_{false};
+  // ------------------------------------------------------------------------------------------------
 };
 
 // ---------------- main ----------------
